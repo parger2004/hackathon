@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as dist
@@ -17,32 +18,50 @@ class ActorNetwork(nn.Module):
         # Run the constructor of the parent class (nn.Module):
         super().__init__()
 
-        '''
-        Write your code here.
-        '''
-
-        # Example:
-        num_gate_types = action_dim
-        self.fc1 = nn.Linear(state_dim, 128)
-        self.fc2 = nn.Linear(128, 128)
-        self.output_layer = nn.Linear(128, num_gate_types)
+        # Store dimensions for action space
+        self.num_qubits = int(action_dim.high[1]) + 1  # Extract num_qubits from action space
+        
+        # Shared feature extraction layers
+        self.shared_fc1 = nn.Linear(state_dim, 256)
+        self.shared_fc2 = nn.Linear(256, 128)
+        
+        # Gate type selection (categorical: 0-5)
+        self.gate_type_head = nn.Linear(128, 6)  # RX, RY, RZ, H, CNOT_control, CNOT_target
+        
+        # Qubit selection (categorical: 0 to num_qubits-1)
+        self.qubit_head = nn.Linear(128, self.num_qubits)
+        
+        # Parameter value (continuous: -1 to 1)
+        self.parameter_head = nn.Linear(128, 1)
 
     def forward(self, state):
         """
-        Forward pass.
-        """
-
-        '''
-        Write your code here.
-        '''
+        Forward pass to generate action distributions.
         
-        # Example:
-        x = F.relu(self.fc1(state))
-        x = F.relu(self.fc2(x))
-        # Gate Type Distribution:
-        gate_logits = self.output_layer(x) # Raw logits.
-        gate_dist = dist.Categorical(logits=gate_logits) # Categorical internally applies Softmax.
-        return gate_dist
+        Returns:
+            gate_dist: Categorical distribution for gate types
+            qubit_dist: Categorical distribution for qubit selection  
+            parameter_dist: Normal distribution for parameter values
+        """
+        
+        # Shared feature extraction
+        x = F.relu(self.shared_fc1(state))
+        x = F.relu(self.shared_fc2(x))
+        
+        # Gate type distribution (categorical)
+        gate_logits = self.gate_type_head(x)
+        gate_dist = dist.Categorical(logits=gate_logits)
+        
+        # Qubit selection distribution (categorical)
+        qubit_logits = self.qubit_head(x)
+        qubit_dist = dist.Categorical(logits=qubit_logits)
+        
+        # Parameter distribution (continuous, constrained to [-1, 1])
+        parameter_mean = torch.tanh(self.parameter_head(x))  # Constrain to [-1, 1]
+        parameter_std = torch.ones_like(parameter_mean) * 0.3  # Fixed std for exploration
+        parameter_dist = dist.Normal(parameter_mean, parameter_std)
+        
+        return gate_dist, qubit_dist, parameter_dist
 
 class CriticNetwork(nn.Module):
     """

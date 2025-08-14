@@ -314,6 +314,24 @@ class VQEnv(gym.Env):
 
         return expectation_value
 
+    def get_expectation_value(self, circuit: QuantumCircuit, hamiltonian: SparsePauliOp) -> float:
+        """
+        Get the expectation value (energy) of a quantum circuit with respect to a Hamiltonian.
+        
+        Args:
+            circuit (QuantumCircuit): The quantum circuit (ansatz).
+            hamiltonian (SparsePauliOp): The molecular Hamiltonian.
+            
+        Returns:
+            float: The expectation value (energy).
+        """
+        try:
+            # Use the existing compute_expectation_value method
+            return self.compute_expectation_value(circuit, hamiltonian, [])
+        except Exception as e:
+            # Return a large positive energy for invalid circuits
+            return 1000.0
+
     def compute_reward(self, qc: QuantumCircuit = None):
         """
         Computes the reward for a given circuit based on VQE energy.
