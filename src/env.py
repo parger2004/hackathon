@@ -7,8 +7,8 @@ import time                                      # For time tracking.
 import os                                        # For file system access.
 
 # Custom helper functions for the environment:
-from src.helper_functions.decoding import decode_actions_into_circuit
-from src.helper_functions.encoding import encode_circuit_into_input_embedding  
+from helper_functions.decoding import decode_actions_into_circuit
+from helper_functions.encoding import encode_circuit_into_input_embedding  
 
 # Quantum Circuits:
 from qiskit.circuit import QuantumCircuit, QuantumRegister, Parameter # To build quantum circuits.
@@ -335,6 +335,7 @@ class VQEnv(gym.Env):
     def compute_reward(self, qc: QuantumCircuit = None):
         """
         Computes the reward for a given circuit based on VQE energy.
+        FIXED: Multi-level reward shaping for better learning signal.
 
         Args:
             qc (QuantumCircuit): The quantum circuit to evaluate. If None, uses self.current_circuit.
@@ -350,27 +351,60 @@ class VQEnv(gym.Env):
             # Compute expectation value using the circuit
             energy = self.get_expectation_value(qc, self.qubit_operator)
             
-            # Reward is the negative energy difference from FCI (target is minimum energy)
-            # The closer to FCI energy, the higher the reward
+            # Calculate energy difference from target FCI energy
             energy_diff = abs(energy - self.fci_energy)
             
-            # Use exponential reward to encourage convergence within tolerance
-            if energy_diff < self.conv_tol:
-                reward = 100.0  # High reward for convergence
+            # FIXED: Multi-tier reward system with positive reinforcement
+            if energy_diff < self.conv_tol:  # Converged (< 1e-5)
+                reward = 1000.0
+                print(f"  🎉 CONVERGENCE ACHIEVED! Energy diff: {energy_diff:.2e}")
+            elif energy_diff < 0.001:  # Very close (< 1e-3)
+                reward = 500.0
+                print(f"  🌟 Very close to target! Energy diff: {energy_diff:.4f}")
+            elif energy_diff < 0.01:   # Close (< 1e-2)
+                reward = 100.0
+                print(f"  ⭐ Getting close! Energy diff: {energy_diff:.4f}")
+            elif energy_diff < 0.1:    # Progress (< 1e-1)
+                reward = 20.0
+                print(f"  📈 Making progress! Energy diff: {energy_diff:.4f}")
+            elif energy_diff < 0.5:    # Some improvement
+                reward = 5.0
             else:
-                # Negative reward proportional to energy difference
-                reward = -energy_diff * 1000  # Scale factor for training stability
+                # Shaped reward for large errors - still provide learning signal
+                max_reasonable_diff = 2.0  # Reasonable max for LiH molecule
+                progress_ratio = max(0, (max_reasonable_diff - energy_diff) / max_reasonable_diff)
+                reward = progress_ratio * 10 - 5  # Range: [-5, +10]
             
-            # Add penalty for very deep circuits to encourage efficiency
-            circuit_depth_penalty = -0.1 * qc.depth()
+            # Efficiency bonus: encourage shorter circuits
+            circuit_depth = qc.depth()
+            if circuit_depth <= 3:
+                efficiency_bonus = 5.0  # Bonus for very efficient circuits
+            elif circuit_depth <= 10:
+                efficiency_bonus = 2.0  # Small bonus for reasonable circuits
+            else:
+                efficiency_bonus = -0.1 * (circuit_depth - 10)  # Penalty for very deep circuits
             
-            total_reward = reward + circuit_depth_penalty
+            # Gate count bonus: encourage fewer gates
+            gate_count = len(qc.data)
+            if gate_count <= 10:
+                gate_bonus = 2.0
+            elif gate_count <= 20:
+                gate_bonus = 1.0
+            else:
+                gate_bonus = -0.05 * (gate_count - 20)
+            
+            total_reward = reward + efficiency_bonus + gate_bonus
+            
+            # Store energy for tracking
+            if not hasattr(self, 'energy_history'):
+                self.energy_history = []
+            self.energy_history.append(energy)
             
             return total_reward
             
         except Exception as e:
-            # Return large negative reward for invalid circuits
-            return -1000.0
+            print(f"  ❌ Circuit evaluation failed: {e}")
+            return -100.0  # Reduced penalty for errors
 
     def reset(self, seed: int = 42, options: dict = {}) -> tuple:
         """

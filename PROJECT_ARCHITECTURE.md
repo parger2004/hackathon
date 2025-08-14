@@ -3,7 +3,7 @@
 
 ### 📋 **Project Overview**
 This project implements **Proximal Policy Optimization (PPO)** to automatically design quantum circuits for **Variational Quantum Eigensolver (VQE)** algorithms. The AI agent learns to construct optimal quantum circuits that minimize the ground state energy of molecules through reinforcement learning.
-
+ 
 **Primary Goal**: Train an AI agent to build quantum circuits that solve the LiH molecule's ground state energy problem with minimal gates and maximum efficiency.
 
 **Key Innovation**: Instead of hand-crafted ansätze, the agent discovers optimal circuit architectures through exploration and reward-based learning.

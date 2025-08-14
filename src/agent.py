@@ -6,8 +6,8 @@ from torch.optim import Adam, SGD # For gradient update.
 from typing import Tuple # For typing annotation.
 
 # Importing custom modules:
-from src.actor_critic_networks import ActorNetwork, CriticNetwork
-from src.memory import PPOMemory
+from actor_critic_networks import ActorNetwork, CriticNetwork
+from memory import PPOMemory
 
 class PPOAgent:
     '''
@@ -192,7 +192,7 @@ class PPOAgent:
             
             # Entropy bonus for exploration
             entropy = gate_dist.entropy() + qubit_dist.entropy() + param_dist.entropy()
-            entropy_loss = -0.01 * entropy.mean()  # Small entropy coefficient
+            entropy_loss = -0.05 * entropy.mean()  # INCREASED entropy coefficient for better exploration
             
             # Total actor loss
             total_actor_loss = actor_loss + entropy_loss

@@ -24,15 +24,18 @@ class ActorNetwork(nn.Module):
         # Shared feature extraction layers
         self.shared_fc1 = nn.Linear(state_dim, 256)
         self.shared_fc2 = nn.Linear(256, 128)
+        self.shared_fc3 = nn.Linear(128, 64)
+        self.shared_fc4 = nn.Linear(64, 32)
+
         
         # Gate type selection (categorical: 0-5)
-        self.gate_type_head = nn.Linear(128, 6)  # RX, RY, RZ, H, CNOT_control, CNOT_target
+        self.gate_type_head = nn.Linear(32, 6)  # RX, RY, RZ, H, CNOT_control, CNOT_target
         
         # Qubit selection (categorical: 0 to num_qubits-1)
-        self.qubit_head = nn.Linear(128, self.num_qubits)
+        self.qubit_head = nn.Linear(32, self.num_qubits)
         
         # Parameter value (continuous: -1 to 1)
-        self.parameter_head = nn.Linear(128, 1)
+        self.parameter_head = nn.Linear(32, 1)
 
     def forward(self, state):
         """
@@ -47,6 +50,9 @@ class ActorNetwork(nn.Module):
         # Shared feature extraction
         x = F.relu(self.shared_fc1(state))
         x = F.relu(self.shared_fc2(x))
+        x = F.relu(self.shared_fc3(x))
+        x = F.relu(self.shared_fc4(x))
+        
         
         # Gate type distribution (categorical)
         gate_logits = self.gate_type_head(x)

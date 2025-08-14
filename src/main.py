@@ -6,19 +6,100 @@ import sys # Command-line arguments.
 import os # Directories.
 import signal # For graceful interrupt handling.
 import time # For timing operations.
+import matplotlib.pyplot as plt # For plotting.
 
 # Helper functions:
 #from helper_functions.save_qubit_op import save_qubit_op_to_file
-from src.helper_functions.load_qubit_op import load_qubit_op_from_file
+from helper_functions.load_qubit_op import load_qubit_op_from_file
 
 # Import the agent and environment classes:
-from src.agent import PPOAgent
-from src.env import VQEnv
+from agent import PPOAgent
+from env import VQEnv
+
+def create_training_plots(episode_numbers, final_energies, energy_errors, episode_rewards, fci_energy, best_energy, best_episode):
+    """Create and save training progress plots"""
+    
+    # Create figure with subplots
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
+    fig.suptitle('🧬 Quantum VQE Training Progress', fontsize=16, fontweight='bold')
+    
+    # Plot 1: Final Energy vs Episode
+    ax1.plot(episode_numbers, final_energies, 'b-', linewidth=2, alpha=0.7, label='Final Energy')
+    ax1.axhline(y=fci_energy, color='r', linestyle='--', linewidth=2, label=f'Target FCI Energy ({fci_energy:.6f})')
+    ax1.axhline(y=best_energy, color='g', linestyle=':', linewidth=2, label=f'Best Energy ({best_energy:.6f})')
+    ax1.set_xlabel('Episode')
+    ax1.set_ylabel('Energy (Hartree)')
+    ax1.set_title('🎯 Energy Convergence')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    
+    # Plot 2: Energy Error vs Episode (log scale)
+    ax2.semilogy(episode_numbers, energy_errors, 'r-', linewidth=2, alpha=0.7, label='Energy Error')
+    ax2.axhline(y=1e-5, color='orange', linestyle='--', linewidth=2, label='Convergence Tolerance (1e-5)')
+    ax2.set_xlabel('Episode')
+    ax2.set_ylabel('|Energy - FCI| (log scale)')
+    ax2.set_title('📉 Energy Error (Log Scale)')
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+    
+    # Plot 3: Episode Rewards
+    ax3.plot(episode_numbers, episode_rewards, 'purple', linewidth=2, alpha=0.7, label='Episode Reward')
+    ax3.set_xlabel('Episode')
+    ax3.set_ylabel('Total Reward')
+    ax3.set_title('🏆 Training Rewards')
+    ax3.legend()
+    ax3.grid(True, alpha=0.3)
+    
+    # Plot 4: Moving Average of Energy Error
+    window_size = min(10, len(energy_errors))
+    if len(energy_errors) >= window_size:
+        moving_avg = np.convolve(energy_errors, np.ones(window_size)/window_size, mode='valid')
+        moving_episodes = episode_numbers[window_size-1:]
+        ax4.plot(episode_numbers, energy_errors, 'lightblue', alpha=0.5, label='Energy Error')
+        ax4.plot(moving_episodes, moving_avg, 'darkblue', linewidth=3, label=f'Moving Average ({window_size} episodes)')
+    else:
+        ax4.plot(episode_numbers, energy_errors, 'darkblue', linewidth=2, label='Energy Error')
+    ax4.axhline(y=1e-5, color='orange', linestyle='--', linewidth=2, label='Convergence Tolerance')
+    ax4.set_xlabel('Episode')
+    ax4.set_ylabel('|Energy - FCI|')
+    ax4.set_title('📊 Energy Error Trend')
+    ax4.legend()
+    ax4.grid(True, alpha=0.3)
+    
+    # Add text box with summary statistics
+    summary_text = f"""Training Summary:
+Episodes: {len(episode_numbers)}
+Best Energy: {best_energy:.6f} (Ep. {best_episode})
+Target Energy: {fci_energy:.6f}
+Best Error: {abs(best_energy - fci_energy):.2e}
+Final Error: {energy_errors[-1]:.2e}
+Converged: {'✅ YES' if energy_errors[-1] < 1e-5 else '❌ NO'}"""
+    
+    fig.text(0.02, 0.02, summary_text, fontsize=10, 
+             bbox=dict(boxstyle="round,pad=0.5", facecolor="lightgray", alpha=0.8))
+    
+    plt.tight_layout(rect=[0, 0.15, 1, 0.96])
+    
+    # Save the plot
+    os.makedirs('plots', exist_ok=True)
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    plot_filename = f'plots/training_progress_{timestamp}.png'
+    plt.savefig(plot_filename, dpi=300, bbox_inches='tight')
+    print(f"📊 Training plots saved to: {plot_filename}")
+    
+    # Show the plot
+    plt.show()
+    
+    return plot_filename
 
 ##########################################
 if __name__ == '__main__':
-    # Parse command-line arguments:
-    config_file = sys.argv[1]
+    # Parse command-line arguments with fallback:
+    if len(sys.argv) > 1:
+        config_file = sys.argv[1]
+    else:
+        config_file = 'config_lih.cfg'  # Default config file
+        print(f"ℹ️  No config file specified, using default: {config_file}")
 
     # Get the path to the config.cfg file:
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -89,7 +170,10 @@ if __name__ == '__main__':
     '''
     
     # Load the qubit operator from disk:
-    qubit_operator = load_qubit_op_from_file(file_path = "./src/operators/qubit_op_LiH.qpy")
+    # Construct absolute path to ensure it works from any directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    operator_path = os.path.join(script_dir, "operators", "qubit_op_LiH.qpy")
+    qubit_operator = load_qubit_op_from_file(file_path=operator_path)
 
     ##########################################
 
@@ -121,6 +205,12 @@ if __name__ == '__main__':
     start_time = time.time()
     best_energy = float('inf')
     best_episode = 0
+    
+    # Lists to store data for plotting
+    episode_numbers = []
+    final_energies = []
+    energy_errors = []
+    episode_rewards = []
     
     try:
         for episode in range(num_episodes):
@@ -183,6 +273,12 @@ if __name__ == '__main__':
                 best_energy = final_energy
                 best_episode = episode + 1
                 print("  🌟 New best energy achieved!")
+            
+            # Store data for plotting
+            episode_numbers.append(episode + 1)
+            final_energies.append(final_energy)
+            energy_errors.append(energy_error)
+            episode_rewards.append(episode_reward)
                 
             print(f"  📈 Episode {episode + 1} Summary:")
             print(f"     Total Reward: {episode_reward:.3f}")
@@ -219,6 +315,15 @@ if __name__ == '__main__':
         print(f"   Best energy achieved: {best_energy:.6f} (Episode {best_episode})")
         print(f"   Target energy: {fci_energy:.6f}")
         print(f"   Best error: {abs(best_energy - fci_energy):.6f}")
+        
+        # Create plots for interrupted training
+        if len(episode_numbers) > 0:
+            print("\n📊 Generating training progress plots...")
+            try:
+                create_training_plots(episode_numbers, final_energies, energy_errors, 
+                                    episode_rewards, fci_energy, best_energy, best_episode)
+            except Exception as plot_error:
+                print(f"❌ Failed to create plots: {plot_error}")
         
         # 🎯 DISPLAY FINAL BEST CIRCUIT (for interrupted training)
         print(f"\n🏆 FINAL BEST CIRCUIT VISUALIZATION:")
@@ -284,6 +389,15 @@ if __name__ == '__main__':
         # Save final models
         agent.save_models()
         print("💾 Final models saved!")
+        
+        # Create final training plots
+        if len(episode_numbers) > 0:
+            print("\n📊 Generating final training progress plots...")
+            try:
+                create_training_plots(episode_numbers, final_energies, energy_errors, 
+                                    episode_rewards, fci_energy, best_energy, best_episode)
+            except Exception as plot_error:
+                print(f"❌ Failed to create plots: {plot_error}")
         
         # 🎯 DISPLAY FINAL BEST CIRCUIT
         print(f"\n🏆 FINAL BEST CIRCUIT VISUALIZATION:")
