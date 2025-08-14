@@ -9,11 +9,11 @@ import time # For timing operations.
 
 # Helper functions:
 #from helper_functions.save_qubit_op import save_qubit_op_to_file
-from helper_functions.load_qubit_op import load_qubit_op_from_file
+from src.helper_functions.load_qubit_op import load_qubit_op_from_file
 
 # Import the agent and environment classes:
-from agent import PPOAgent
-from env import VQEnv
+from src.agent import PPOAgent
+from src.env import VQEnv
 
 ##########################################
 if __name__ == '__main__':
@@ -65,7 +65,7 @@ if __name__ == '__main__':
     gae_lambda = config.getfloat('TRAIN', 'gae_lambda', fallback=0.95) 
     policy_clip = config.getfloat('TRAIN', 'policy_clip', fallback=0.2) 
     batch_size = config.getint('TRAIN', 'batch_size', fallback=64) 
-    num_episodes = config.getint('TRAIN', 'num_episodes', fallback=1000) # This is the number of episodes to train the agent.
+    num_episodes = config.getint('TRAIN', 'num_episodes', fallback=100) # This is the number of episodes to train the agent.
     num_steps = config.getint('TRAIN', 'num_steps', fallback=20) # This is the number of steps per episode.
     num_epochs = config.getint('TRAIN', 'num_epochs', fallback=10) # This is the number of passes over the same batch of collected data for policy update.
     max_circuit_depth = config.getint('TRAIN', 'max_circuit_depth', fallback=50) 
@@ -89,7 +89,7 @@ if __name__ == '__main__':
     '''
     
     # Load the qubit operator from disk:
-    qubit_operator = load_qubit_op_from_file(file_path = "./operators/qubit_op_LiH.qpy")
+    qubit_operator = load_qubit_op_from_file(file_path = "./src/operators/qubit_op_LiH.qpy")
 
     ##########################################
 
@@ -183,7 +183,7 @@ if __name__ == '__main__':
                 best_energy = final_energy
                 best_episode = episode + 1
                 print("  🌟 New best energy achieved!")
-            
+                
             print(f"  📈 Episode {episode + 1} Summary:")
             print(f"     Total Reward: {episode_reward:.3f}")
             print(f"     Final Energy: {final_energy:.6f}")
@@ -220,6 +220,41 @@ if __name__ == '__main__':
         print(f"   Target energy: {fci_energy:.6f}")
         print(f"   Best error: {abs(best_energy - fci_energy):.6f}")
         
+        # 🎯 DISPLAY FINAL BEST CIRCUIT (for interrupted training)
+        print(f"\n🏆 FINAL BEST CIRCUIT VISUALIZATION:")
+        print("=" * 80)
+        try:
+            print(f"📋 Best Result Summary:")
+            print(f"   Episode: {best_episode}")
+            print(f"   Energy: {best_energy:.6f}")
+            print(f"   Target: {fci_energy:.6f}")
+            print(f"   Error: {abs(best_energy - fci_energy):.6f}")
+            print(f"   Convergence: {'✅ YES' if abs(best_energy - fci_energy) < conv_tol else '❌ NO'}")
+            print("=" * 80)
+            
+            # Display current circuit (last episode's result)
+            print(f"🔧 Final Circuit:")
+            print(env.current_circuit.draw(output='text', fold=-1))
+            print("=" * 80)
+            
+            print(f"📊 Final Circuit Statistics:")
+            print(f"   Total Gates: {len(env.current_circuit.data)}")
+            print(f"   Circuit Depth: {env.current_circuit.depth()}")
+            print(f"   Qubits Used: {env.current_circuit.num_qubits}")
+            
+            # List all gates
+            print(f"\n📝 Gate-by-Gate Breakdown:")
+            for i, instruction in enumerate(env.current_circuit.data):
+                gate_name = instruction.operation.name
+                qubits = [env.current_circuit.find_bit(qubit).index for qubit in instruction.qubits]
+                params = getattr(instruction.operation, 'params', [])
+                param_str = f", θ={params[0]:.3f}" if params else ""
+                print(f"   Gate {i+1}: {gate_name.upper()} on qubit(s) {qubits}{param_str}")
+                
+        except Exception as e:
+            print(f"❌ Could not display final circuit: {e}")
+        print("=" * 80)
+        
     except Exception as e:
         print(f"\n❌ Training failed with error: {e}")
         print("💾 Attempting to save current progress...")
@@ -249,6 +284,42 @@ if __name__ == '__main__':
         # Save final models
         agent.save_models()
         print("💾 Final models saved!")
+        
+        # 🎯 DISPLAY FINAL BEST CIRCUIT
+        print(f"\n🏆 FINAL BEST CIRCUIT VISUALIZATION:")
+        print("=" * 80)
+        try:
+            # Find the best circuit from training
+            print(f"📋 Best Result Summary:")
+            print(f"   Episode: {best_episode}")
+            print(f"   Energy: {best_energy:.6f}")
+            print(f"   Target: {fci_energy:.6f}")
+            print(f"   Error: {abs(best_energy - fci_energy):.6f}")
+            print(f"   Convergence: {'✅ YES' if abs(best_energy - fci_energy) < conv_tol else '❌ NO'}")
+            print("=" * 80)
+            
+            # Display current circuit (last episode's result)
+            print(f"🔧 Current Circuit:")
+            print(env.current_circuit.draw(output='text', fold=-1))
+            print("=" * 80)
+            
+            print(f"📊 Final Circuit Statistics:")
+            print(f"   Total Gates: {len(env.current_circuit.data)}")
+            print(f"   Circuit Depth: {env.current_circuit.depth()}")
+            print(f"   Qubits Used: {env.current_circuit.num_qubits}")
+            
+            # List all gates
+            print(f"\n📝 Gate-by-Gate Breakdown:")
+            for i, instruction in enumerate(env.current_circuit.data):
+                gate_name = instruction.operation.name
+                qubits = [env.current_circuit.find_bit(qubit).index for qubit in instruction.qubits]
+                params = getattr(instruction.operation, 'params', [])
+                param_str = f", θ={params[0]:.3f}" if params else ""
+                print(f"   Gate {i+1}: {gate_name.upper()} on qubit(s) {qubits}{param_str}")
+                
+        except Exception as e:
+            print(f"❌ Could not display final circuit: {e}")
+        print("=" * 80)
     
     print(f"\n🏁 Training session ended.")
     print(f"📁 Model checkpoints saved to: model/ppo/")

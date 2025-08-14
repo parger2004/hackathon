@@ -7,8 +7,8 @@ import time                                      # For time tracking.
 import os                                        # For file system access.
 
 # Custom helper functions for the environment:
-from helper_functions.decoding import decode_actions_into_circuit
-from helper_functions.encoding import encode_circuit_into_input_embedding  
+from src.helper_functions.decoding import decode_actions_into_circuit
+from src.helper_functions.encoding import encode_circuit_into_input_embedding  
 
 # Quantum Circuits:
 from qiskit.circuit import QuantumCircuit, QuantumRegister, Parameter # To build quantum circuits.

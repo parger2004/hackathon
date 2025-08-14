@@ -6,8 +6,8 @@ from torch.optim import Adam, SGD # For gradient update.
 from typing import Tuple # For typing annotation.
 
 # Importing custom modules:
-from actor_critic_networks import ActorNetwork, CriticNetwork
-from memory import PPOMemory
+from src.actor_critic_networks import ActorNetwork, CriticNetwork
+from src.memory import PPOMemory
 
 class PPOAgent:
     '''
